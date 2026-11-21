@@ -1,0 +1,461 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  schemas    = ["auth", "public"]
+  extensions = [citext, btree_gist]
+}
+
+// BOOKWISE: RESOURCE TYPE
+
+enum ResourceType {
+  STAFF
+  ROOM
+  EQUIPMENT
+
+  @@map("resource_type")
+  @@schema("public")
+}
+
+// BOOKWISE: BOOKING STATUS
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+
+  @@map("booking_status")
+  @@schema("public")
+}
+
+// BETTER AUTH: USER
+
+model User {
+  id            String   @id
+  name          String
+  email         String   @unique(map: "user_email_unique")
+  emailVerified Boolean  @default(false) @map("email_verified")
+  image         String?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  sessions    Session[]
+  accounts    Account[]
+  members     Member[]
+  invitations Invitation[]
+
+  @@map("user")
+  @@schema("auth")
+}
+
+// BETTER AUTH: SESSION
+
+model Session {
+  id                   String   @id
+  expiresAt            DateTime @map("expires_at") @db.Timestamp(6)
+  token                String   @unique(map: "session_token_unique")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+  ipAddress            String?  @map("ip_address")
+  userAgent            String?  @map("user_agent")
+  userId               String   @map("user_id")
+  activeOrganizationId String?  @map("active_organization_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "session_user_id_user_id_fk")
+
+  @@index([userId], map: "session_userId_idx")
+  @@map("session")
+  @@schema("auth")
+}
+
+// BETTER AUTH: ACCOUNT
+
+model Account {
+  id                    String    @id
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id")
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamp(6)
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamp(6)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "account_user_id_user_id_fk")
+
+  @@index([userId], map: "account_userId_idx")
+  @@map("account")
+  @@schema("auth")
+}
+
+// BETTER AUTH: VERIFICATION
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at") @db.Timestamp(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@index([identifier], map: "verification_identifier_idx")
+  @@map("verification")
+  @@schema("auth")
+}
+
+// BETTER AUTH: ORGANIZATION
+
+model Organization {
+  id        String   @id
+  name      String
+  slug      String   @unique(map: "organization_slug_unique")
+  logo      String?
+  createdAt DateTime @map("created_at") @db.Timestamp(6)
+  metadata  String?
+
+  members     Member[]
+  invitations Invitation[]
+  settings    OrganizationSettings?
+  services    Service[]
+  resources   BookableResource[]
+  customers   Customer[]
+  bookings    Booking[]
+
+  @@map("organization")
+  @@schema("auth")
+}
+
+// BETTER AUTH: MEMBER
+
+model Member {
+  id             String   @id
+  organizationId String   @map("organization_id")
+  userId         String   @map("user_id")
+  role           String   @default("member")
+  createdAt      DateTime @map("created_at") @db.Timestamp(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "member_organization_id_organization_id_fk")
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "member_user_id_user_id_fk")
+
+  @@index([organizationId], map: "member_organizationId_idx")
+  @@index([userId], map: "member_userId_idx")
+  @@map("member")
+  @@schema("auth")
+}
+
+// BETTER AUTH: INVITATION
+
+model Invitation {
+  id             String   @id
+  organizationId String   @map("organization_id")
+  email          String
+  role           String?
+  status         String   @default("pending")
+  expiresAt      DateTime @map("expires_at") @db.Timestamp(6)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  inviterId      String   @map("inviter_id")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "invitation_organization_id_organization_id_fk")
+  user         User         @relation(fields: [inviterId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "invitation_inviter_id_user_id_fk")
+
+  @@index([organizationId], map: "invitation_organizationId_idx")
+  @@index([email], map: "invitation_email_idx")
+  @@map("invitation")
+  @@schema("auth")
+}
+
+// BOOKWISE: ORGANIZATION SETTINGS
+
+model OrganizationSettings {
+  organizationId String @id @map("organization_id")
+
+  timeZone     String @default("UTC") @map("time_zone") @db.VarChar(64)
+  currencyCode String @map("currency_code") @db.Char(3)
+
+  contactEmail String? @map("contact_email")
+  contactPhone String? @map("contact_phone")
+  websiteUrl   String? @map("website_url")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("organization_settings")
+  @@schema("public")
+}
+
+// BOOKWISE: SERVICE
+
+model Service {
+  id             String @id @default(cuid())
+  organizationId String @map("organization_id")
+
+  name        String  @db.VarChar(120)
+  slug        String  @db.VarChar(140)
+  description String? @db.Text
+
+  durationMinutes     Int @map("duration_minutes")
+  bufferBeforeMinutes Int @default(0) @map("buffer_before_minutes")
+  bufferAfterMinutes  Int @default(0) @map("buffer_after_minutes")
+
+  priceAmount  Decimal @map("price_amount") @db.Decimal(12, 2)
+  currencyCode String  @map("currency_code") @db.Char(3)
+
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  resourceRequirements ServiceResourceRequirement[]
+  bookings             Booking[]
+
+  @@unique([organizationId, id], map: "service_organization_id_id_unique")
+  @@unique([organizationId, slug], map: "service_organization_slug_unique")
+  @@index([organizationId, isActive], map: "service_organization_active_idx")
+  @@index([organizationId, name], map: "service_organization_name_idx")
+  @@map("service")
+  @@schema("public")
+}
+
+// BOOKWISE: SERVICE RESOURCE REQUIREMENT
+
+model ServiceResourceRequirement {
+  id             String @id @default(cuid())
+  organizationId String @map("organization_id")
+  serviceId      String @map("service_id")
+
+  name         String       @db.VarChar(120)
+  resourceType ResourceType @map("resource_type")
+  quantity     Int          @default(1)
+
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  service Service @relation(fields: [organizationId, serviceId], references: [organizationId, id], onDelete: Restrict)
+
+  serviceResources ServiceResource[]
+
+  @@unique([organizationId, serviceId, id, resourceType], map: "service_resource_requirement_identity_unique")
+  @@index([organizationId, serviceId, isActive], map: "service_resource_requirement_service_active_idx")
+  @@map("service_resource_requirement")
+  @@schema("public")
+}
+
+// BOOKWISE: BOOKABLE RESOURCE
+
+model BookableResource {
+  id             String @id @default(cuid())
+  organizationId String @map("organization_id")
+
+  name        String       @db.VarChar(120)
+  type        ResourceType
+  description String?      @db.Text
+
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  serviceResources      ServiceResource[]
+  availabilityRules     AvailabilityRule[]
+  availabilityOverrides AvailabilityOverride[]
+  bookingResources      BookingResource[]
+
+  @@unique([organizationId, id], map: "bookable_resource_organization_id_id_unique")
+  @@unique([organizationId, name], map: "bookable_resource_organization_name_unique")
+  @@unique([organizationId, id, type], map: "bookable_resource_organization_id_id_type_unique")
+  @@index([organizationId, type, isActive], map: "bookable_resource_organization_type_active_idx")
+  @@map("bookable_resource")
+  @@schema("public")
+}
+
+// BOOKWISE: SERVICE RESOURCE
+
+model ServiceResource {
+  organizationId String @map("organization_id")
+  serviceId      String @map("service_id")
+  requirementId  String @map("requirement_id")
+  resourceId     String @map("resource_id")
+
+  resourceType ResourceType @map("resource_type")
+
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  requirement ServiceResourceRequirement @relation(fields: [organizationId, serviceId, requirementId, resourceType], references: [organizationId, serviceId, id, resourceType], onDelete: Restrict)
+
+  resource BookableResource @relation(fields: [organizationId, resourceId, resourceType], references: [organizationId, id, type], onDelete: Restrict)
+
+  bookingResources BookingResource[]
+
+  @@id([organizationId, serviceId, requirementId, resourceId])
+  @@index([organizationId, resourceId], map: "service_resource_organization_resource_idx")
+  @@index([organizationId, serviceId, requirementId], map: "service_resource_requirement_idx")
+  @@map("service_resource")
+  @@schema("public")
+}
+
+// BOOKWISE: AVAILABILITY RULE
+
+model AvailabilityRule {
+  id             String @id @default(cuid())
+  organizationId String @map("organization_id")
+  resourceId     String @map("resource_id")
+
+  // ISO weekday: Monday = 1, Sunday = 7
+  dayOfWeek Int @map("day_of_week")
+
+  // Minutes from midnight in the organization's local time zone
+  startMinute Int @map("start_minute")
+  endMinute   Int @map("end_minute")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  resource BookableResource @relation(fields: [organizationId, resourceId], references: [organizationId, id], onDelete: Restrict)
+
+  @@index([organizationId, resourceId, dayOfWeek], map: "availability_rule_resource_weekday_idx")
+  @@map("availability_rule")
+  @@schema("public")
+}
+
+// BOOKWISE: AVAILABILITY OVERRIDE
+
+model AvailabilityOverride {
+  id             String @id @default(cuid())
+  organizationId String @map("organization_id")
+  resourceId     String @map("resource_id")
+
+  startsAt DateTime @map("starts_at") @db.Timestamptz(6)
+  endsAt   DateTime @map("ends_at") @db.Timestamptz(6)
+
+  // true = additional availability
+  // false = unavailable during this interval
+  isAvailable Boolean @map("is_available")
+
+  reason String? @db.VarChar(250)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  resource BookableResource @relation(fields: [organizationId, resourceId], references: [organizationId, id], onDelete: Restrict)
+
+  @@index([organizationId, resourceId, startsAt, endsAt], map: "availability_override_resource_interval_idx")
+  @@map("availability_override")
+  @@schema("public")
+}
+
+// BOOKWISE: CUSTOMER
+
+model Customer {
+  id             String @id @default(cuid())
+  organizationId String @map("organization_id")
+
+  name  String  @db.VarChar(120)
+  email String? @db.Citext
+  phone String? @db.VarChar(30)
+
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  bookings Booking[]
+
+  @@unique([organizationId, id], map: "customer_organization_id_id_unique")
+  @@unique([organizationId, email], map: "customer_organization_email_unique")
+  @@index([organizationId, name], map: "customer_organization_name_idx")
+  @@index([organizationId, phone], map: "customer_organization_phone_idx")
+  @@map("customer")
+  @@schema("public")
+}
+
+// BOOKWISE: BOOKING
+
+model Booking {
+  id             String @id @default(cuid())
+  organizationId String @map("organization_id")
+  customerId     String @map("customer_id")
+  serviceId      String @map("service_id")
+
+  status BookingStatus @default(PENDING)
+
+  startsAt DateTime @map("starts_at") @db.Timestamptz(6)
+  endsAt   DateTime @map("ends_at") @db.Timestamptz(6)
+
+  // Service details preserved at booking time
+  serviceName            String  @map("service_name") @db.VarChar(120)
+  serviceDurationMinutes Int     @map("service_duration_minutes")
+  priceAmount            Decimal @map("price_amount") @db.Decimal(12, 2)
+  currencyCode           String  @map("currency_code") @db.Char(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  customer Customer @relation(fields: [organizationId, customerId], references: [organizationId, id], onDelete: Restrict)
+
+  service Service @relation(fields: [organizationId, serviceId], references: [organizationId, id], onDelete: Restrict)
+
+  bookingResources BookingResource[]
+
+  @@unique([organizationId, id], map: "booking_organization_id_id_unique")
+  @@unique([organizationId, id, serviceId], map: "booking_organization_id_service_unique")
+  @@index([organizationId, startsAt], map: "booking_organization_start_idx")
+  @@index([organizationId, customerId, startsAt], map: "booking_customer_start_idx")
+  @@index([organizationId, status, startsAt], map: "booking_status_start_idx")
+  @@map("booking")
+  @@schema("public")
+}
+
+// BOOKWISE: BOOKING RESOURCE
+
+model BookingResource {
+  organizationId String @map("organization_id")
+  bookingId      String @map("booking_id")
+  serviceId      String @map("service_id")
+  requirementId  String @map("requirement_id")
+  resourceId     String @map("resource_id")
+
+  resourceType ResourceType @map("resource_type")
+
+  reservedStartsAt DateTime @map("reserved_starts_at") @db.Timestamptz(6)
+  reservedEndsAt   DateTime @map("reserved_ends_at") @db.Timestamptz(6)
+
+  releasedAt DateTime? @map("released_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  booking Booking @relation(fields: [organizationId, bookingId, serviceId], references: [organizationId, id, serviceId], onDelete: Restrict)
+
+  resource BookableResource @relation(fields: [organizationId, resourceId, resourceType], references: [organizationId, id, type], onDelete: Restrict)
+
+  serviceResource ServiceResource @relation(fields: [organizationId, serviceId, requirementId, resourceId], references: [organizationId, serviceId, requirementId, resourceId], onDelete: Restrict)
+
+  @@id([organizationId, bookingId, resourceId])
+  @@index([organizationId, resourceId, reservedStartsAt], map: "booking_resource_resource_start_idx")
+  @@index([organizationId, bookingId], map: "booking_resource_booking_idx")
+  @@map("booking_resource")
+  @@schema("public")
+}

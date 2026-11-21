@@ -1,0 +1,9 @@
+BEGIN;
+
+-- BOOKWISE: PROTECT PRISMA MIGRATION HISTORY
+
+REVOKE ALL PRIVILEGES
+ON TABLE public._prisma_migrations
+FROM bookwise_app;
+
+COMMIT;
