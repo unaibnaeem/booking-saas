@@ -6,6 +6,11 @@ import { prisma } from "./prisma";
 
 import { env } from "../env";
 
+const DEFAULT_ORGANIZATION_SETTINGS = {
+  timeZone: "Asia/Karachi",
+  currencyCode: "PKR",
+} as const;
+
 export const auth = betterAuth({
   baseURL: env.BETTER_AUTH_URL,
   secret: env.BETTER_AUTH_SECRET,
@@ -35,6 +40,24 @@ export const auth = betterAuth({
     organization({
       allowUserToCreateOrganization: true,
       creatorRole: "owner",
+
+      organizationHooks: {
+        async afterCreateOrganization({ organization }) {
+          await prisma.organizationSettings.upsert({
+            where: {
+              organizationId: organization.id,
+            },
+
+            update: {},
+
+            create: {
+              organizationId: organization.id,
+              timeZone: DEFAULT_ORGANIZATION_SETTINGS.timeZone,
+              currencyCode: DEFAULT_ORGANIZATION_SETTINGS.currencyCode,
+            },
+          });
+        },
+      },
 
       async sendInvitationEmail(data) {
         if (process.env.NODE_ENV !== "development") {

@@ -1,0 +1,662 @@
+{
+  "info": {
+    "_postman_id": "63ed9d69-f6ca-460e-abc3-27887d3a4e72",
+    "name": "Bookwise - Booking API",
+    "description": "Functional test collection for the Bookwise booking CRUD API. Run requests in the Booking lifecycle folder from top to bottom. The collection checks POST idempotency replay, listing, details, update, and soft cancellation.\n\nBefore running:\n\n1. Start the Bookwise app at [http://localhost:3000](http://localhost:3000).\n    \n2. Sign in through the app and select an active organization.\n    \n3. Set the environment variables customerId and serviceId to active records belonging to that organization.\n    \n4. Set sessionCookie to the complete Cookie header value copied from an authenticated localhost request in browser DevTools. Do not include the leading word 'Cookie:'.\n    \n5. Use a new idempotencyKey for each fresh create test cycle.\n    \n\nDELETE is a soft cancellation: the booking remains retrievable with status CANCELLED.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "30760238"
+  },
+  "item": [
+    {
+      "name": "Booking lifecycle",
+      "item": [
+        {
+          "name": "1. Create booking (POST, idempotent)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 201 Created', function () { pm.response.to.have.status(201); });\nconst body = pm.response.json();\npm.test('returns a booking object', function () { pm.expect(body).to.have.nested.property('data.booking.id'); });\nif (pm.response.code === 201 && body?.data?.booking?.id) { pm.collectionVariables.set('bookingId', body.data.booking.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"serviceId\": \"{{serviceId}}\",\n  \"startsAt\": \"{{startsAt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings"]
+            },
+            "description": "Creates a PENDING booking. Price, currency, service duration, and end time are taken from the selected service on the server."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Replay create request (same key and body)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('replays the original 201 response', function () {\n    pm.response.to.have.status(201);\n});\n\nconst body = pm.response.json();\n\npm.test('returns the same booking ID', function () {\n    pm.expect(body?.data?.booking?.id)\n        .to.eql(pm.collectionVariables.get('bookingId'));\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"serviceId\": \"{{serviceId}}\",\n  \"startsAt\": \"{{startsAt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings"]
+            },
+            "description": "Send the identical payload with the identical Idempotency-Key. It should replay the stored response, not create a second booking."
+          },
+          "response": []
+        },
+        {
+          "name": "3. List bookings (GET)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test('returns bookings and pagination metadata', function () { pm.expect(body).to.have.nested.property('data.bookings'); pm.expect(body.data.bookings).to.be.an('array'); pm.expect(body).to.have.nested.property('data.pagination.total'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Lists bookings for the active organization. Optional filters: status, from, and to (ISO 8601 timestamps)."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Get booking by ID (GET)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 200 OK', function () { pm.response.to.have.status(200); });\nconst body = pm.response.json();\npm.test('returns the requested booking', function () { pm.expect(body).to.have.nested.property('data.booking.id', pm.collectionVariables.get('bookingId')); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings", "{{bookingId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5. Update booking status (PATCH)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test('booking status is CONFIRMED', function () { pm.expect(body).to.have.nested.property('data.booking.status', 'CONFIRMED'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CONFIRMED\",\n  \"startsAt\": \"{{updatedStartsAt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings", "{{bookingId}}"]
+            },
+            "description": "Changes the created booking to CONFIRMED and moves its start time. The API should recalculate endsAt using the service duration stored on the booking."
+          },
+          "response": []
+        },
+        {
+          "name": "6. Cancel booking (DELETE / soft cancel)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test('booking is marked CANCELLED', function () { pm.expect(body).to.have.nested.property('data.booking.status', 'CANCELLED'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings", "{{bookingId}}"]
+            },
+            "description": "This endpoint performs a soft cancellation, not a physical database deletion."
+          },
+          "response": []
+        },
+        {
+          "name": "7. Repeat cancellation (idempotent DELETE behavior)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('repeat cancellation returns 200 OK', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings", "{{bookingId}}"]
+            },
+            "description": "Repeating cancellation for an already-cancelled booking should succeed without changing its outcome."
+          },
+          "response": []
+        },
+        {
+          "name": "8. Verify cancelled booking remains retrievable (GET)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 200 OK', function () { pm.response.to.have.status(200); });\nconst body = pm.response.json();\npm.test('booking still exists and has CANCELLED status', function () { pm.expect(body).to.have.nested.property('data.booking.id', pm.collectionVariables.get('bookingId')); pm.expect(body).to.have.nested.property('data.booking.status', 'CANCELLED'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings", "{{bookingId}}"]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Run these requests in order. The Create request stores bookingId; Replay verifies the same request returns the same booking."
+    },
+    {
+      "name": "Booking list filters",
+      "item": [
+        {
+          "name": "1. List upcoming bookings (scope)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 200 OK', function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\nconst body = pm.response.json();\r\n\r\npm.test('returns bookings and pagination', function () {\r\n    pm.expect(body).to.have.nested.property('data.bookings');\r\n    pm.expect(body.data.bookings).to.be.an('array');\r\n    pm.expect(body).to.have.nested.property('data.pagination');\r\n});\r\n\r\npm.test('upcoming scope excludes cancelled bookings', function () {\r\n    body.data.bookings.forEach(function (booking) {\r\n        pm.expect(booking.status).not.to.eql('CANCELLED');\r\n    });\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings?page=1&limit=20&scope=upcoming",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "scope",
+                  "value": "upcoming"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2. List past bookings (scope)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 200 OK', function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\nconst body = pm.response.json();\r\n\r\npm.test('returns bookings and pagination', function () {\r\n    pm.expect(body).to.have.nested.property('data.bookings');\r\n    pm.expect(body.data.bookings).to.be.an('array');\r\n    pm.expect(body).to.have.nested.property('data.pagination');\r\n});\r\n\r\npm.test('past scope excludes future and cancelled bookings', function () {\r\n    const now = Date.now();\r\n\r\n    body.data.bookings.forEach(function (booking) {\r\n        pm.expect(booking.status).not.to.eql('CANCELLED');\r\n        pm.expect(new Date(booking.startsAt).getTime()).to.be.below(now);\r\n    });\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings?page=1&limit=20&scope=past",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "scope",
+                  "value": "past"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3. List cancelled bookings (scope)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 200 OK', function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\nconst body = pm.response.json();\r\n\r\npm.test('returns bookings and pagination', function () {\r\n    pm.expect(body).to.have.nested.property('data.bookings');\r\n    pm.expect(body.data.bookings).to.be.an('array');\r\n    pm.expect(body).to.have.nested.property('data.pagination');\r\n});\r\n\r\npm.test('cancelled scope returns only cancelled bookings', function () {\r\n    body.data.bookings.forEach(function (booking) {\r\n        pm.expect(booking.status).to.eql('CANCELLED');\r\n    });\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings?page=1&limit=20&scope=cancelled",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "scope",
+                  "value": "cancelled"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "4. List all bookings (scope)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 200 OK', function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\nconst body = pm.response.json();\r\n\r\npm.test('returns bookings and pagination', function () {\r\n    pm.expect(body).to.have.nested.property('data.bookings');\r\n    pm.expect(body.data.bookings).to.be.an('array');\r\n    pm.expect(body).to.have.nested.property('data.pagination');\r\n});\r\n\r\npm.test('includes the recently cancelled booking', function () {\r\n    pm.expect(\r\n        body.data.bookings.some(function (booking) {\r\n            return booking.id === pm.collectionVariables.get('bookingId')\r\n                && booking.status === 'CANCELLED';\r\n        })\r\n    ).to.eql(true);\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings?page=1&limit=20&scope=all",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "scope",
+                  "value": "all"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5. List today's bookings (period)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 200 OK', function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\nconst body = pm.response.json();\r\n\r\npm.test('returns bookings, pagination and timezone', function () {\r\n    pm.expect(body).to.have.nested.property('data.bookings');\r\n    pm.expect(body.data.bookings).to.be.an('array');\r\n    pm.expect(body).to.have.nested.property('data.pagination');\r\n    pm.expect(body).to.have.nested.property('data.timeZone');\r\n});\r\n\r\nfunction localDate(value, timeZone) {\r\n    const parts = new Intl.DateTimeFormat('en-CA', {\r\n        timeZone,\r\n        year: 'numeric',\r\n        month: '2-digit',\r\n        day: '2-digit'\r\n    }).formatToParts(new Date(value));\r\n\r\n    const part = (type) => parts.find(p => p.type === type).value;\r\n\r\n    return `${part('year')}-${part('month')}-${part('day')}`;\r\n}\r\n\r\npm.test('today period contains only organization-local today bookings', function () {\r\n    const timeZone = body.data.timeZone;\r\n    const today = localDate(Date.now(), timeZone);\r\n\r\n    body.data.bookings.forEach(function (booking) {\r\n        pm.expect(localDate(booking.startsAt, timeZone)).to.eql(today);\r\n    });\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings?page=1&limit=20&period=today",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "period",
+                  "value": "today"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "6. List tomorrow's bookings (period)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 200 OK', function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\nconst body = pm.response.json();\r\n\r\npm.test('returns bookings, pagination and timezone', function () {\r\n    pm.expect(body).to.have.nested.property('data.bookings');\r\n    pm.expect(body.data.bookings).to.be.an('array');\r\n    pm.expect(body).to.have.nested.property('data.pagination');\r\n    pm.expect(body).to.have.nested.property('data.timeZone');\r\n});\r\n\r\nfunction localDate(value, timeZone) {\r\n    const parts = new Intl.DateTimeFormat('en-CA', {\r\n        timeZone,\r\n        year: 'numeric',\r\n        month: '2-digit',\r\n        day: '2-digit'\r\n    }).formatToParts(new Date(value));\r\n\r\n    const part = (type) => parts.find(p => p.type === type).value;\r\n\r\n    return `${part('year')}-${part('month')}-${part('day')}`;\r\n}\r\n\r\npm.test('tomorrow period contains only organization-local tomorrow bookings', function () {\r\n    const timeZone = body.data.timeZone;\r\n    const today = localDate(Date.now(), timeZone);\r\n\r\n    const expectedTomorrow = new Date(`${today}T00:00:00.000Z`);\r\n    expectedTomorrow.setUTCDate(expectedTomorrow.getUTCDate() + 1);\r\n\r\n    const tomorrow = expectedTomorrow.toISOString().slice(0, 10);\r\n\r\n    body.data.bookings.forEach(function (booking) {\r\n        pm.expect(localDate(booking.startsAt, timeZone)).to.eql(tomorrow);\r\n    });\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings?page=1&limit=20&period=tomorrow",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "period",
+                  "value": "tomorrow"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7. List this week's bookings (period)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 200 OK', function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\nconst body = pm.response.json();\r\n\r\npm.test('returns bookings, pagination and timezone', function () {\r\n    pm.expect(body).to.have.nested.property('data.bookings');\r\n    pm.expect(body.data.bookings).to.be.an('array');\r\n    pm.expect(body).to.have.nested.property('data.pagination');\r\n    pm.expect(body).to.have.nested.property('data.timeZone');\r\n});\r\n\r\nfunction localDate(value, timeZone) {\r\n    const parts = new Intl.DateTimeFormat('en-CA', {\r\n        timeZone,\r\n        year: 'numeric',\r\n        month: '2-digit',\r\n        day: '2-digit'\r\n    }).formatToParts(new Date(value));\r\n\r\n    const part = (type) => parts.find(p => p.type === type).value;\r\n\r\n    return `${part('year')}-${part('month')}-${part('day')}`;\r\n}\r\n\r\npm.test('this-week contains only organization-local current-week bookings', function () {\r\n    const timeZone = body.data.timeZone;\r\n    const today = localDate(Date.now(), timeZone);\r\n\r\n    const [year, month, day] = today.split('-').map(Number);\r\n    const todayUTC = new Date(Date.UTC(year, month - 1, day));\r\n\r\n    // Monday is the first day of the week.\r\n    const daysSinceMonday = (todayUTC.getUTCDay() + 6) % 7;\r\n\r\n    todayUTC.setUTCDate(todayUTC.getUTCDate() - daysSinceMonday);\r\n\r\n    const weekStart = todayUTC.toISOString().slice(0, 10);\r\n\r\n    todayUTC.setUTCDate(todayUTC.getUTCDate() + 7);\r\n\r\n    const nextWeekStart = todayUTC.toISOString().slice(0, 10);\r\n\r\n    body.data.bookings.forEach(function (booking) {\r\n        const bookingDate = localDate(booking.startsAt, timeZone);\r\n\r\n        pm.expect(bookingDate >= weekStart && bookingDate < nextWeekStart)\r\n            .to.eql(true);\r\n    });\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings?page=1&limit=20&period=this-week",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "period",
+                  "value": "this-week"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "sessionCookie",
+      "value": ""
+    },
+    {
+      "key": "customerId",
+      "value": "REPLACE_WITH_ACTIVE_CUSTOMER_ID"
+    },
+    {
+      "key": "serviceId",
+      "value": "REPLACE_WITH_ACTIVE_SERVICE_ID"
+    },
+    {
+      "key": "bookingId",
+      "value": ""
+    },
+    {
+      "key": "idempotencyKey",
+      "value": "REPLACE_WITH_UNIQUE_IDEMPOTENCY_KEY"
+    },
+    {
+      "key": "startsAt",
+      "value": "2026-11-27T10:00:00+05:00"
+    },
+    {
+      "key": "updatedStartsAt",
+      "value": "2026-11-27T11:00:00+05:00"
+    }
+  ]
+}

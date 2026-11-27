@@ -1,11 +1,18 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type SubmitEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { z } from "zod";
+import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
+
+import { useOrganizations } from "@/features/organizations/hooks/use-organizations";
+
+import { OrganizationAccessLoadingState } from "@/features/organizations/components/organization-access-loading-state";
+
+import { createSlug } from "@/features/organizations/utils/slug";
 
 const organizationSchema = z.object({
   name: z
@@ -25,17 +32,6 @@ const organizationSchema = z.object({
     ),
 });
 
-function createSlug(value: string) {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 140);
-}
-
 export default function OrganizationOnboardingPage() {
   const router = useRouter();
 
@@ -45,6 +41,22 @@ export default function OrganizationOnboardingPage() {
     error: sessionError,
   } = authClient.useSession();
 
+  const isOrganizationLoadingEnabled =
+    !isSessionPending && Boolean(session) && !sessionError;
+
+  const {
+    organizations,
+    isLoading: isCheckingOrganizations,
+    errorMessage: organizationCheckError,
+    isSelectingId,
+    handleRetry: handleRetryOrganizations,
+    activateOrganization,
+  } = useOrganizations({
+    enabled: isOrganizationLoadingEnabled,
+  });
+
+  const automaticActivationStarted = useRef<string | null>(null);
+
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [isSlugEdited, setIsSlugEdited] = useState(false);
@@ -52,17 +64,59 @@ export default function OrganizationOnboardingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const [createdOrganization, setCreatedOrganization] = useState<{
-    name: string;
-    slug: string;
-  } | null>(null);
-
-  // Onboarding requires an authenticated user.
   useEffect(() => {
-    if (!isSessionPending && (!session || sessionError)) {
+    if (isSessionPending) {
+      return;
+    }
+
+    if (!session || sessionError) {
       router.replace("/login");
     }
   }, [isSessionPending, session, sessionError, router]);
+
+  useEffect(() => {
+    if (
+      isSessionPending ||
+      !session ||
+      sessionError ||
+      isCheckingOrganizations ||
+      organizationCheckError
+    ) {
+      return;
+    }
+
+    if (organizations.length > 1) {
+      router.replace("/select-organization");
+      return;
+    }
+
+    if (organizations.length === 1) {
+      const organization = organizations[0];
+
+      if (automaticActivationStarted.current === organization.id) {
+        return;
+      }
+
+      automaticActivationStarted.current = organization.id;
+
+      void (async () => {
+        const activated = await activateOrganization(organization.id);
+
+        if (activated) {
+          router.replace("/dashboard");
+        }
+      })();
+    }
+  }, [
+    isSessionPending,
+    session,
+    sessionError,
+    isCheckingOrganizations,
+    organizationCheckError,
+    organizations,
+    activateOrganization,
+    router,
+  ]);
 
   function handleNameChange(value: string) {
     setName(value);
@@ -77,7 +131,22 @@ export default function OrganizationOnboardingPage() {
     setSlug(value.toLowerCase().replace(/[^a-z0-9-]/g, ""));
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleRetryOrganizationAccess() {
+    if (organizations.length === 1) {
+      const activated = await activateOrganization(organizations[0].id);
+
+      if (activated) {
+        router.replace("/dashboard");
+      }
+
+      return;
+    }
+
+    automaticActivationStarted.current = null;
+    handleRetryOrganizations();
+  }
+
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
 
     setErrorMessage(null);
@@ -95,21 +164,31 @@ export default function OrganizationOnboardingPage() {
     setIsSubmitting(true);
 
     try {
-      const { error } = await authClient.organization.create({
-        name: validation.data.name,
-        slug: validation.data.slug,
-        keepCurrentActiveOrganization: false,
-      });
+      const { data: organization, error } =
+        await authClient.organization.create({
+          name: validation.data.name,
+          slug: validation.data.slug,
+          keepCurrentActiveOrganization: false,
+        });
 
       if (error) {
         setErrorMessage(error.message || "Unable to create your organization.");
         return;
       }
 
-      setCreatedOrganization({
-        name: validation.data.name,
-        slug: validation.data.slug,
+      if (!organization) {
+        setErrorMessage(
+          "Organization creation could not be confirmed. Please try again.",
+        );
+        return;
+      }
+
+      toast.success("Organization created successfully.", {
+        description: `${organization.name} is ready to use.`,
       });
+
+      router.replace("/dashboard");
+      router.refresh();
     } catch {
       setErrorMessage(
         "Unable to connect to the authentication service. Please try again.",
@@ -119,176 +198,182 @@ export default function OrganizationOnboardingPage() {
     }
   }
 
-  if (isSessionPending || !session) {
+  if (
+    isSessionPending ||
+    !session ||
+    isCheckingOrganizations ||
+    (organizations.length > 0 && !organizationCheckError)
+  ) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#f5f7f6] px-4">
-        <p className="text-sm text-slate-500">Checking your session...</p>
+      <OrganizationAccessLoadingState
+        label={
+          isSessionPending
+            ? "Checking your account..."
+            : isSelectingId
+              ? "Opening your organization..."
+              : "Checking your organizations..."
+        }
+      />
+    );
+  }
+
+  if (organizationCheckError) {
+    return (
+      <main className="bg-background flex min-h-screen items-center justify-center px-4">
+        <div className="w-full max-w-md space-y-4">
+          <div
+            role="alert"
+            className="border-danger/20 bg-danger/5 text-danger rounded-lg border px-4 py-3 text-sm leading-6"
+          >
+            {organizationCheckError}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void handleRetryOrganizationAccess()}
+            disabled={isSelectingId !== null || isCheckingOrganizations}
+            className="bg-primary text-primary-foreground hover:bg-primary-hover h-11 w-full cursor-pointer rounded-lg px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSelectingId ? "Activating organization..." : "Try again"}
+          </button>
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f5f7f6] px-4 py-12">
+    <main className="bg-background flex min-h-screen items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mb-3 flex items-center justify-center gap-2.5">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-slate-900 text-lg font-bold text-white shadow-sm">
+          <Link
+            href="/"
+            className="mb-3 inline-flex items-center justify-center gap-2.5"
+          >
+            <div className="bg-primary text-primary-foreground flex size-10 items-center justify-center rounded-xl text-lg font-bold">
               B
             </div>
 
-            <span className="text-2xl font-semibold tracking-tight text-slate-900">
+            <span className="text-foreground text-2xl font-bold tracking-tight">
               bookwise
             </span>
-          </div>
+          </Link>
 
-          <p className="text-sm text-slate-500">
+          <p className="text-muted-foreground text-sm">
             Simple scheduling. Better business.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm sm:p-9">
-          {createdOrganization ? (
-            <div className="py-3 text-center">
-              <div className="mx-auto mb-5 flex size-14 items-center justify-center rounded-full bg-emerald-50 text-2xl text-emerald-600">
-                ✓
-              </div>
+        <div className="border-border bg-surface rounded-2xl border p-6 shadow-sm sm:p-9">
+          <div className="mb-7">
+            <p className="text-accent mb-2 text-xs font-semibold tracking-wider uppercase">
+              Organization onboarding
+            </p>
 
-              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-                Organization created!
-              </h1>
+            <h1 className="text-foreground text-2xl font-semibold tracking-tight">
+              Set up your organization
+            </h1>
 
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                Your Bookwise organization is ready.
-              </p>
+            <p className="text-muted-foreground mt-2 text-sm leading-6">
+              Create your organization to start managing your business and
+              bookings with Bookwise.
+            </p>
+          </div>
 
-              <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-left">
-                <p className="text-xs font-medium tracking-wide text-slate-500 uppercase">
-                  Organization
-                </p>
+          <div className="border-border bg-surface-muted mb-6 rounded-lg border px-3.5 py-3">
+            <p className="text-muted-foreground text-xs">Signed in as</p>
 
-                <p className="mt-1 text-lg font-semibold text-slate-900">
-                  {createdOrganization.name}
-                </p>
+            <p className="text-foreground mt-1 text-sm font-medium break-all">
+              {session.user.email}
+            </p>
+          </div>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  {createdOrganization.slug}
-                </p>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label
+                htmlFor="organization-name"
+                className="text-foreground mb-2 block text-sm font-medium"
+              >
+                Organization name
+              </label>
 
-                <p className="mt-4 border-t border-slate-200 pt-3 text-sm text-emerald-700">
-                  You are the owner of this organization.
-                </p>
-              </div>
+              <input
+                id="organization-name"
+                name="organizationName"
+                type="text"
+                autoComplete="organization"
+                placeholder="e.g. Acme Dental Clinic"
+                value={name}
+                onChange={(event) => handleNameChange(event.target.value)}
+                required
+                maxLength={120}
+                disabled={isSubmitting}
+                className="border-border bg-surface text-foreground placeholder:text-muted-foreground/70 focus:border-primary focus:ring-primary/10 h-11 w-full rounded-lg border px-3.5 text-sm transition outline-none focus:ring-2 disabled:opacity-60"
+              />
             </div>
-          ) : (
-            <>
-              <div className="mb-7">
-                <p className="mb-2 text-xs font-medium tracking-wider text-slate-500 uppercase">
-                  Organization onboarding
-                </p>
 
-                <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-                  Set up your organization
-                </h1>
+            <div>
+              <label
+                htmlFor="organization-slug"
+                className="text-foreground mb-2 block text-sm font-medium"
+              >
+                Organization URL
+              </label>
 
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Create your organization to start managing your business and
-                  bookings with Bookwise.
-                </p>
-              </div>
+              <div className="border-border bg-surface focus-within:border-primary focus-within:ring-primary/10 flex h-11 items-center overflow-hidden rounded-lg border transition focus-within:ring-2">
+                <span className="border-border bg-surface-muted text-muted-foreground flex h-full shrink-0 items-center border-r px-3 text-xs font-medium">
+                  bookwise/
+                </span>
 
-              <div className="mb-6 rounded-lg bg-slate-50 px-3.5 py-3">
-                <p className="text-xs text-slate-500">Signed in as</p>
-
-                <p className="mt-1 text-sm font-medium text-slate-800">
-                  {session.user.email}
-                </p>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div>
-                  <label
-                    htmlFor="organization-name"
-                    className="mb-2 block text-sm font-medium text-slate-700"
-                  >
-                    Organization name
-                  </label>
-
-                  <input
-                    id="organization-name"
-                    type="text"
-                    autoComplete="organization"
-                    placeholder="e.g. Acme Dental Clinic"
-                    value={name}
-                    onChange={(event) => handleNameChange(event.target.value)}
-                    required
-                    maxLength={120}
-                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3.5 text-sm text-slate-900 transition outline-none placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="organization-slug"
-                    className="mb-2 block text-sm font-medium text-slate-700"
-                  >
-                    Organization URL
-                  </label>
-
-                  <div className="flex h-11 items-center overflow-hidden rounded-lg border border-slate-300 bg-white transition focus-within:border-slate-900 focus-within:ring-2 focus-within:ring-slate-900/10">
-                    <span className="flex h-full items-center border-r border-slate-200 bg-slate-50 px-3 text-xs text-slate-500">
-                      bookwise/
-                    </span>
-
-                    <input
-                      id="organization-slug"
-                      type="text"
-                      value={slug}
-                      onChange={(event) => handleSlugChange(event.target.value)}
-                      placeholder="acme-dental"
-                      required
-                      maxLength={140}
-                      className="h-full min-w-0 flex-1 bg-white px-3 text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                    />
-                  </div>
-
-                  <p className="mt-2 text-xs text-slate-500">
-                    Use lowercase letters, numbers, and hyphens.
-                  </p>
-                </div>
-
-                {errorMessage && (
-                  <div
-                    role="alert"
-                    className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-700"
-                  >
-                    {errorMessage}
-                  </div>
-                )}
-
-                <button
-                  type="submit"
+                <input
+                  id="organization-slug"
+                  name="organizationSlug"
+                  type="text"
+                  value={slug}
+                  onChange={(event) => handleSlugChange(event.target.value)}
+                  placeholder="acme-dental"
+                  required
+                  maxLength={140}
                   disabled={isSubmitting}
-                  className="flex h-11 w-full cursor-pointer items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isSubmitting
-                    ? "Creating organization..."
-                    : "Create organization"}
-                </button>
-              </form>
-            </>
-          )}
+                  className="text-foreground placeholder:text-muted-foreground/70 h-full min-w-0 flex-1 bg-transparent px-3 text-sm outline-none disabled:opacity-60"
+                />
+              </div>
+
+              <p className="text-muted-foreground mt-2 text-xs leading-5">
+                Use lowercase letters, numbers, and hyphens.
+              </p>
+            </div>
+
+            {errorMessage && (
+              <div
+                role="alert"
+                className="border-danger/20 bg-danger/5 text-danger rounded-lg border px-3.5 py-3 text-sm leading-6"
+              >
+                {errorMessage}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="bg-primary text-primary-foreground hover:bg-primary-hover focus-visible:outline-primary flex h-11 w-full cursor-pointer items-center justify-center rounded-lg px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSubmitting
+                ? "Creating organization..."
+                : "Create organization"}
+            </button>
+          </form>
         </div>
 
         <div className="mt-6 text-center">
           <Link
             href="/login"
-            className="text-sm text-slate-500 transition hover:text-slate-900"
+            className="text-muted-foreground hover:text-primary text-sm font-medium transition-colors"
           >
             Back to sign in
           </Link>
         </div>
 
-        <p className="mt-5 text-center text-xs text-slate-400">
+        <p className="text-muted-foreground mt-5 text-center text-xs">
           © {new Date().getFullYear()} Bookwise. All rights reserved.
         </p>
       </div>

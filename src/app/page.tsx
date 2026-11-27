@@ -1,16 +1,46 @@
 import Link from "next/link";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 
-export default function HomePage() {
+import { auth } from "@/lib/auth";
+
+const features = [
+  {
+    number: "01",
+    title: "Your organization",
+    description: "Create a dedicated workspace for your business and team.",
+  },
+  {
+    number: "02",
+    title: "Your services",
+    description: "Structure your services, staff, and bookable resources.",
+  },
+  {
+    number: "03",
+    title: "Your bookings",
+    description: "Build an organized scheduling workflow for your customers.",
+  },
+];
+
+export default async function HomePage() {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (session) {
+    redirect("/dashboard");
+  }
+
   return (
-    <main className="min-h-screen bg-[#f5f7f6] text-slate-900">
-      <header className="border-b border-slate-200/80 bg-white/80 backdrop-blur">
+    <main className="bg-background text-foreground min-h-screen">
+      <header className="border-border bg-surface/90 border-b backdrop-blur">
         <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-xl bg-slate-900 text-lg font-bold text-white">
+            <div className="bg-primary text-primary-foreground flex size-9 items-center justify-center rounded-xl text-lg font-bold">
               B
             </div>
 
-            <span className="text-xl font-semibold tracking-tight">
+            <span className="text-foreground text-xl font-bold tracking-tight">
               bookwise
             </span>
           </Link>
@@ -18,14 +48,14 @@ export default function HomePage() {
           <div className="flex items-center gap-3">
             <Link
               href="/login"
-              className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 transition hover:text-slate-950"
+              className="text-muted-foreground hover:text-foreground rounded-lg px-4 py-2 text-sm font-medium transition-colors"
             >
               Sign in
             </Link>
 
             <Link
               href="/register"
-              className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
+              className="bg-primary text-primary-foreground hover:bg-primary-hover rounded-lg px-4 py-2.5 text-sm font-medium transition-colors"
             >
               Get started
             </Link>
@@ -34,19 +64,19 @@ export default function HomePage() {
       </header>
 
       <section className="mx-auto flex min-h-[calc(100vh-65px)] max-w-7xl flex-col items-center justify-center px-5 py-20 text-center sm:px-8">
-        <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-600 shadow-sm">
-          <span className="size-2 rounded-full bg-emerald-500" />
+        <div className="border-border bg-surface text-muted-foreground mb-8 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-medium">
+          <span className="bg-success size-2 rounded-full" />
           Scheduling made simpler
         </div>
 
-        <h1 className="max-w-4xl text-4xl leading-tight font-semibold tracking-tight text-slate-950 sm:text-6xl sm:leading-[1.12]">
+        <h1 className="text-foreground max-w-4xl text-4xl leading-tight font-semibold tracking-tight sm:text-6xl sm:leading-[1.12]">
           Spend less time managing schedules.
-          <span className="mt-2 block text-slate-500">
+          <span className="text-accent mt-2 block">
             Focus more on your business.
           </span>
         </h1>
 
-        <p className="mt-7 max-w-2xl text-base leading-8 text-slate-500 sm:text-lg">
+        <p className="text-muted-foreground mt-7 max-w-2xl text-base leading-8 sm:text-lg">
           Bookwise is a scheduling platform designed to help service businesses
           organize their teams, services, and appointments in one place.
         </p>
@@ -54,7 +84,7 @@ export default function HomePage() {
         <div className="mt-10 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
           <Link
             href="/register"
-            className="flex h-12 items-center justify-center rounded-lg bg-slate-900 px-7 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
+            className="bg-primary text-primary-foreground hover:bg-primary-hover flex h-12 items-center justify-center rounded-lg px-7 text-sm font-semibold transition-colors"
           >
             Create your account
             <span className="ml-2" aria-hidden="true">
@@ -64,53 +94,34 @@ export default function HomePage() {
 
           <Link
             href="/login"
-            className="flex h-12 items-center justify-center rounded-lg border border-slate-300 bg-white px-7 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            className="border-border bg-surface text-foreground hover:bg-surface-muted flex h-12 items-center justify-center rounded-lg border px-7 text-sm font-medium transition-colors"
           >
             Sign in to Bookwise
           </Link>
         </div>
 
         <div className="mt-24 grid w-full max-w-4xl gap-5 text-left sm:grid-cols-3">
-          {[
-            {
-              number: "01",
-              title: "Your organization",
-              description:
-                "Create a dedicated workspace for your business and team.",
-            },
-            {
-              number: "02",
-              title: "Your services",
-              description:
-                "Structure your services, staff, and bookable resources.",
-            },
-            {
-              number: "03",
-              title: "Your bookings",
-              description:
-                "Build an organized scheduling workflow for your customers.",
-            },
-          ].map((feature) => (
+          {features.map((feature) => (
             <div
               key={feature.number}
-              className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+              className="border-border bg-surface hover:border-sage rounded-2xl border p-6 transition-colors"
             >
-              <span className="text-xs font-semibold tracking-wider text-slate-400">
+              <span className="text-accent text-xs font-semibold tracking-wider">
                 {feature.number}
               </span>
 
-              <h2 className="mt-5 text-base font-semibold text-slate-900">
+              <h2 className="text-foreground mt-5 text-base font-semibold">
                 {feature.title}
               </h2>
 
-              <p className="mt-2 text-sm leading-6 text-slate-500">
+              <p className="text-muted-foreground mt-2 text-sm leading-6">
                 {feature.description}
               </p>
             </div>
           ))}
         </div>
 
-        <footer className="mt-20 text-xs text-slate-400">
+        <footer className="text-muted-foreground mt-20 text-xs">
           © {new Date().getFullYear()} Bookwise. All rights reserved.
         </footer>
       </section>

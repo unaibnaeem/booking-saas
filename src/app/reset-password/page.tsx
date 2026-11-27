@@ -1,17 +1,20 @@
 "use client";
 
-import { Suspense, useState, type FormEvent } from "react";
+import { Suspense, useState, type SubmitEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
 
+import { PasswordInput } from "@/components/ui/password-input";
+import { ButtonSpinner } from "@/components/ui/button-spinner";
+
 export default function ResetPasswordPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center bg-[#f5f7f6]">
-          <p className="text-sm text-slate-500">Loading reset link...</p>
+        <main className="bg-background flex min-h-screen items-center justify-center px-4">
+          <p className="text-muted-foreground text-sm">Loading reset link...</p>
         </main>
       }
     >
@@ -33,7 +36,7 @@ function ResetPasswordForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
 
     setErrorMessage(null);
@@ -88,31 +91,34 @@ function ResetPasswordForm() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f5f7f6] px-4 py-12">
+    <main className="bg-background flex min-h-screen items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mb-3 flex items-center justify-center gap-2.5">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-slate-900 text-lg font-bold text-white shadow-sm">
+          <Link
+            href="/"
+            className="mb-3 inline-flex items-center justify-center gap-2.5"
+          >
+            <div className="bg-primary text-primary-foreground flex size-10 items-center justify-center rounded-xl text-lg font-bold">
               B
             </div>
 
-            <span className="text-2xl font-semibold tracking-tight text-slate-900">
+            <span className="text-foreground text-2xl font-bold tracking-tight">
               bookwise
             </span>
-          </div>
+          </Link>
 
-          <p className="text-sm text-slate-500">
+          <p className="text-muted-foreground text-sm">
             Simple scheduling. Better business.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm sm:p-9">
+        <div className="border-border bg-surface rounded-2xl border p-7 shadow-sm sm:p-9">
           <div className="mb-7">
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+            <h1 className="text-foreground text-2xl font-semibold tracking-tight">
               Reset your password
             </h1>
 
-            <p className="mt-2 text-sm leading-6 text-slate-500">
+            <p className="text-muted-foreground mt-2 text-sm leading-6">
               Choose a new password for your Bookwise account.
             </p>
           </div>
@@ -121,7 +127,7 @@ function ResetPasswordForm() {
             <div className="space-y-5">
               <div
                 role="alert"
-                className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-6 text-red-700"
+                className="border-danger/20 bg-danger/5 text-danger rounded-lg border px-3.5 py-3 text-sm leading-6"
               >
                 This password reset link is invalid or has expired. Please
                 request a new one.
@@ -129,7 +135,7 @@ function ResetPasswordForm() {
 
               <Link
                 href="/forgot-password"
-                className="flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+                className="bg-primary text-primary-foreground hover:bg-primary-hover focus-visible:outline-primary flex h-11 w-full items-center justify-center rounded-lg px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 Request a new reset link
               </Link>
@@ -138,14 +144,14 @@ function ResetPasswordForm() {
             <div className="space-y-5">
               <div
                 role="status"
-                className="rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm leading-6 text-emerald-800"
+                className="border-success/20 bg-success/5 text-success rounded-lg border px-3.5 py-3 text-sm leading-6"
               >
                 {successMessage}
               </div>
 
               <Link
                 href="/login"
-                className="flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+                className="bg-primary text-primary-foreground hover:bg-primary-hover focus-visible:outline-primary flex h-11 w-full items-center justify-center rounded-lg px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 Continue to sign in
               </Link>
@@ -155,15 +161,14 @@ function ResetPasswordForm() {
               <div>
                 <label
                   htmlFor="password"
-                  className="mb-2 block text-sm font-medium text-slate-700"
+                  className="text-foreground mb-2 block text-sm font-medium"
                 >
                   New password
                 </label>
 
-                <input
+                <PasswordInput
                   id="password"
                   name="password"
-                  type="password"
                   autoComplete="new-password"
                   placeholder="Enter your new password"
                   value={password}
@@ -172,10 +177,9 @@ function ResetPasswordForm() {
                   maxLength={128}
                   required
                   disabled={isSubmitting}
-                  className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3.5 text-sm text-slate-900 transition outline-none placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 disabled:cursor-not-allowed disabled:opacity-60"
                 />
 
-                <p className="mt-1.5 text-xs text-slate-400">
+                <p className="text-muted-foreground mt-1.5 text-xs">
                   Use between 12 and 128 characters.
                 </p>
               </div>
@@ -183,29 +187,27 @@ function ResetPasswordForm() {
               <div>
                 <label
                   htmlFor="confirmPassword"
-                  className="mb-2 block text-sm font-medium text-slate-700"
+                  className="text-foreground mb-2 block text-sm font-medium"
                 >
                   Confirm new password
                 </label>
 
-                <input
+                <PasswordInput
                   id="confirmPassword"
                   name="confirmPassword"
-                  type="password"
                   autoComplete="new-password"
                   placeholder="Enter your new password again"
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   required
                   disabled={isSubmitting}
-                  className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3.5 text-sm text-slate-900 transition outline-none placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </div>
 
               {errorMessage && (
                 <div
                   role="alert"
-                  className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-700"
+                  className="border-danger/20 bg-danger/5 text-danger rounded-lg border px-3.5 py-3 text-sm"
                 >
                   {errorMessage}
                 </div>
@@ -214,24 +216,28 @@ function ResetPasswordForm() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                className="bg-primary text-primary-foreground hover:bg-primary-hover focus-visible:outline-primary flex h-11 w-full cursor-pointer items-center justify-center rounded-lg px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSubmitting ? "Resetting password..." : "Reset password"}
+                {isSubmitting ? (
+                  <ButtonSpinner label="Resetting password..." />
+                ) : (
+                  "Reset password"
+                )}
               </button>
             </form>
           )}
 
-          <div className="mt-7 border-t border-slate-100 pt-6 text-center">
+          <div className="border-border mt-7 border-t pt-6 text-center">
             <Link
               href="/login"
-              className="text-sm font-medium text-slate-700 transition hover:text-slate-950"
+              className="text-primary hover:text-accent text-sm font-semibold transition-colors"
             >
               ← Back to sign in
             </Link>
           </div>
         </div>
 
-        <p className="mt-6 text-center text-xs text-slate-400">
+        <p className="text-muted-foreground mt-6 text-center text-xs">
           © {new Date().getFullYear()} Bookwise. All rights reserved.
         </p>
       </div>

@@ -123,13 +123,14 @@ model Organization {
   createdAt DateTime @map("created_at") @db.Timestamp(6)
   metadata  String?
 
-  members     Member[]
-  invitations Invitation[]
-  settings    OrganizationSettings?
-  services    Service[]
-  resources   BookableResource[]
-  customers   Customer[]
-  bookings    Booking[]
+  members            Member[]
+  invitations        Invitation[]
+  settings           OrganizationSettings?
+  services           Service[]
+  resources          BookableResource[]
+  customers          Customer[]
+  bookings           Booking[]
+  idempotencyRecords IdempotencyRecord[]
 
   @@map("organization")
   @@schema("auth")
@@ -457,5 +458,29 @@ model BookingResource {
   @@index([organizationId, resourceId, reservedStartsAt], map: "booking_resource_resource_start_idx")
   @@index([organizationId, bookingId], map: "booking_resource_booking_idx")
   @@map("booking_resource")
+  @@schema("public")
+}
+
+// BOOKWISE: IDEMPOTENCY RECORD
+
+model IdempotencyRecord {
+  organizationId String @map("organization_id")
+  key            String @db.VarChar(255)
+
+  requestHash String @map("request_hash") @db.Char(64)
+
+  responseStatus Int?  @map("response_status")
+  responseBody   Json? @map("response_body")
+
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, key])
+  @@index([expiresAt], map: "idempotency_record_expires_at_idx")
+  @@map("idempotency_record")
   @@schema("public")
 }

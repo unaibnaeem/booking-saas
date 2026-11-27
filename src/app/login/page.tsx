@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type SubmitEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { authClient } from "@/lib/auth-client";
+
+import { PasswordInput } from "@/components/ui/password-input";
+import { ButtonSpinner } from "@/components/ui/button-spinner";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -15,62 +18,96 @@ export default function LoginPage() {
 
   const router = useRouter();
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
 
     setErrorMessage(null);
     setIsSubmitting(true);
 
     try {
-      const { error } = await authClient.signIn.email({
+      const { error: signInError } = await authClient.signIn.email({
         email: email.trim().toLowerCase(),
         password,
         rememberMe: true,
       });
 
-      if (error) {
+      if (signInError) {
         setErrorMessage(
-          error.message || "The email address or password is incorrect.",
+          signInError.message || "The email address or password is incorrect.",
         );
         return;
       }
 
-      router.replace("/onboarding/organization");
+      const { data: organizations, error: organizationsError } =
+        await authClient.organization.list();
+
+      if (organizationsError || !organizations) {
+        setErrorMessage(
+          "Signed in, but unable to load your organizations. Please refresh and try again.",
+        );
+        return;
+      }
+
+      if (organizations.length === 0) {
+        router.replace("/onboarding/organization");
+        return;
+      }
+
+      if (organizations.length === 1) {
+        const { error: activeOrganizationError } =
+          await authClient.organization.setActive({
+            organizationId: organizations[0].id,
+          });
+
+        if (activeOrganizationError) {
+          setErrorMessage(
+            activeOrganizationError.message ||
+              "Unable to activate your organization. Please try again.",
+          );
+          return;
+        }
+
+        router.replace("/dashboard");
+        return;
+      }
+
+      router.replace("/select-organization");
     } catch {
-      setErrorMessage(
-        "Unable to connect to the authentication service. Please try again.",
-      );
+      setErrorMessage("Unable to complete sign in. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f5f7f6] px-4 py-12">
+    <main className="bg-background flex min-h-screen items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mb-3 flex items-center justify-center gap-2.5">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-slate-900 text-lg font-bold text-white shadow-sm">
+          <Link
+            href="/"
+            className="mb-3 inline-flex items-center justify-center gap-2.5"
+          >
+            <div className="bg-primary text-primary-foreground flex size-10 items-center justify-center rounded-xl text-lg font-bold">
               B
             </div>
 
-            <span className="text-2xl font-semibold tracking-tight text-slate-900">
+            <span className="text-foreground text-2xl font-bold tracking-tight">
               bookwise
             </span>
-          </div>
+          </Link>
 
-          <p className="text-sm text-slate-500">
+          <p className="text-muted-foreground text-sm">
             Simple scheduling. Better business.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm sm:p-9">
+        <div className="border-border bg-surface rounded-2xl border p-7 shadow-sm sm:p-9">
           <div className="mb-7">
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+            <h1 className="text-foreground text-2xl font-semibold tracking-tight">
               Welcome back
             </h1>
 
-            <p className="mt-2 text-sm leading-6 text-slate-500">
+            <p className="text-muted-foreground mt-2 text-sm leading-6">
               Sign in to your Bookwise account to manage your organization and
               bookings.
             </p>
@@ -80,7 +117,7 @@ export default function LoginPage() {
             <div>
               <label
                 htmlFor="email"
-                className="mb-2 block text-sm font-medium text-slate-700"
+                className="text-foreground mb-2 block text-sm font-medium"
               >
                 Email address
               </label>
@@ -94,7 +131,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 required
-                className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3.5 text-sm text-slate-900 transition outline-none placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                className="border-border bg-surface text-foreground placeholder:text-muted-foreground/70 focus:border-primary focus:ring-primary/10 h-11 w-full rounded-lg border px-3.5 text-sm transition outline-none focus:ring-2"
               />
             </div>
 
@@ -102,36 +139,34 @@ export default function LoginPage() {
               <div className="mb-2 flex items-center justify-between">
                 <label
                   htmlFor="password"
-                  className="block text-sm font-medium text-slate-700"
+                  className="text-foreground block text-sm font-medium"
                 >
                   Password
                 </label>
 
                 <Link
                   href="/forgot-password"
-                  className="text-sm font-medium text-slate-700 transition hover:text-slate-950"
+                  className="text-accent hover:text-primary text-sm font-medium transition-colors"
                 >
                   Forgot password?
                 </Link>
               </div>
 
-              <input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 autoComplete="current-password"
                 placeholder="Enter your password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 required
-                className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3.5 text-sm text-slate-900 transition outline-none placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
               />
             </div>
 
             {errorMessage && (
               <div
                 role="alert"
-                className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-700"
+                className="border-danger/20 bg-danger/5 text-danger rounded-lg border px-3.5 py-3 text-sm"
               >
                 {errorMessage}
               </div>
@@ -140,18 +175,22 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex h-11 w-full cursor-pointer items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              className="bg-primary text-primary-foreground hover:bg-primary-hover focus-visible:outline-primary flex h-11 w-full cursor-pointer items-center justify-center rounded-lg px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isSubmitting ? "Signing in..." : "Sign in"}
+              {isSubmitting ? (
+                <ButtonSpinner label="Signing in..." />
+              ) : (
+                "Sign in"
+              )}
             </button>
           </form>
 
-          <div className="mt-7 border-t border-slate-100 pt-6 text-center">
-            <p className="text-sm text-slate-500">
+          <div className="border-border mt-7 border-t pt-6 text-center">
+            <p className="text-muted-foreground text-sm">
               New to Bookwise?{" "}
               <Link
                 href="/register"
-                className="font-medium text-slate-900 transition hover:text-slate-600"
+                className="text-primary hover:text-accent font-semibold transition-colors"
               >
                 Create an account
               </Link>
@@ -159,7 +198,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <p className="mt-6 text-center text-xs text-slate-400">
+        <p className="text-muted-foreground mt-6 text-center text-xs">
           © {new Date().getFullYear()} Bookwise. All rights reserved.
         </p>
       </div>

@@ -8,20 +8,26 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --import tsx --test src/lib/api/idempotency-core.test.ts",
+    "test:integration": "node --conditions=react-server --import tsx --import ./scripts/load-integration-test-env.mjs --test src/lib/api/idempotency-db.integration.test.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "^1.7.25",
+    "@date-fns/tz": "^1.5.0",
+    "@fontsource-variable/dm-sans": "^5.3.0",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "better-auth": "^1.7.25",
     "dotenv": "^18.0.10",
+    "geist": "^1.9.2",
     "next": "16.4.6",
     "pg": "^8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "^0.0.1",
+    "sonner": "^2.0.8",
     "zod": "^4.6.7"
   },
   "devDependencies": {
